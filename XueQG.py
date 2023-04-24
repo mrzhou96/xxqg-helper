@@ -2,10 +2,12 @@ import os
 import time
 import math
 from func.Xuecore import XCore
-from func import score, user, version, threads
+from func import score, user, version, threads, common
 from study import reader
 from answers.respond import *
 import platform
+import datetime
+import time
 
 if __name__ == '__main__':
 
@@ -19,13 +21,27 @@ if __name__ == '__main__':
               '\n使用本项目，必须接受以下内容，否则请立即退出：' +
               '\n   - 仅额外提供给“爱党爱国”且“工作学业繁重”的人' +
               '\n   - 此项目运行过程中自动记录学习内容，可过后再次学习' +
-              '\n   - 项目开源协议 LGPL-3.0' +
+              '\n   - 项目开源协议 MIT' +
               '\n   - 仅限内部交流，不允许外传' +
               '\n   - 不得利用本项目盈利' +
               "\n" + "=" * 60)
     # 获取版本更新信息
     version_thread = threads.MyThread("获取版本更新信息", version.up_info)
     version_thread.run()
+
+    if xue_cfg["base"]["SleepSeconds"] != "0":
+        sleep_seconds = random.randint(1, int(xue_cfg["base"]["SleepSeconds"]))
+        print("等待" + str(sleep_seconds) + "秒后执行..")
+        time.sleep(sleep_seconds)
+
+    try:
+        core = XCore(noimg=False, nohead=True, nofake=False)
+        common.user_agent = core.getUserAgent()
+        print(common.user_agent)
+        core.quit()
+    except Exception as e:
+        print("获取UserAgent失败" + str(e))
+        pass
 
     # 读取用户登录信息Cookie
     cookies = user.check_user_cookie()
@@ -34,12 +50,21 @@ if __name__ == '__main__':
         cookies = user.check_user_cookie()
 
     if not cookies or user_list == 2:
-        nohead = True
-        if platform.system().lower() == 'windows' and xue_cfg["push"]["PushMode"] == '0':
-            nohead = False
-        driver_login = XCore(noimg=False, nohead=nohead, nofake=False)
-        cookies, QRID = driver_login.logging()
-        driver_login.quit()
+        try:
+            nohead = True
+            if platform.system().lower() == 'windows' and xue_cfg["push"]["PushMode"] == '0':
+                nohead = False
+            driver_login = XCore(noimg=False, nohead=nohead, nofake=False)
+            cookies, QRID = driver_login.logging()
+            driver_login.quit()
+        except Exception as e:
+            print("登录过程发生错误：" + str(e))
+            sendMessage("登录过程发生错误")
+            os._exit(1001)
+
+    uid, nick = user.get_userInfo(cookies)
+    user.update_last_user(uid)
+    cookies = user.get_newer_cookie_and_save()
 
     delta_seconds = user.get_cookie_expire_second(cookies)
     delta_hours = round(delta_seconds / 3600)
@@ -51,13 +76,22 @@ if __name__ == '__main__':
     else:
         print(color.green("[*]Cookie信息生效中，大约剩余%d小时" % delta_hours))
 
-    uid, nick = user.get_userInfo(cookies)
-    user.update_last_user(uid)
+    # 更新Cookie标志文件，此模式只保活Cookie，不学习
+    if os.path.exists("./User/UpdateCookie"):
+        os.remove("./User/UpdateCookie")
+        print("更新Cookie有效期，不进行学习！")
+        os._exit(0)
+
+    if os.environ.get("UpdateCookie") is not None:
+        print("更新Cookie有效期，不进行学习！")
+        os._exit(0)
+
     # 查询用户今天分数
     scores = score.show_userScore(cookies)
     # 学习情况发送到钉钉
     try:
-        cookie_expire_msg = "\n > ###### Cookie有效时长:" + str(delta_hours) + "小时"
+        cookie_expire_msg = "\n > ###### " + time.strftime('%Y-%m-%d %H:%M:%S') + " Cookie有效时长:" + str(delta_hours) \
+                            + "小时"
         send_msg = "#### " + nick + "开始学习" + \
                    "\n > ##### 目前学习总积分: " + str(scores["total"]) + "\t今日得分: " + str(scores["today"]) + \
                    "\n > ###### 阅读文章: " + str(scores["article_num"]) + "/" + str(scores["article_num_max"]) + \
@@ -80,7 +114,7 @@ if __name__ == '__main__':
             print("读取到配置文件...选择模式: " + xue_cfg["base"]["ModeType"])
             XueQG_mode = xue_cfg["base"]["ModeType"]
     except Exception as e:
-        print("选择模式错误：" + e)
+        print("选择模式错误：" + str(e))
         os._exit(0)
 
     print(xue_cfg['base']['multiThreadingText'] + '\n' + "-" * 60)
@@ -144,6 +178,8 @@ if __name__ == '__main__':
     scores = score.get_userScore(cookies)
     # 学习结束情况发送到钉钉
     try:
+        cookie_expire_msg = "\n > ###### " + time.strftime('%Y-%m-%d %H:%M:%S') + " Cookie有效时长:" + str(delta_hours) \
+                            + "小时"
         send_msg = "#### " + nick + "学习结束 \n > ##### 学习总积分: " + str(scores["total"]) + "\t今日得分: " + str(
             scores["today"]) + \
                    "\n > ###### 阅读文章: " + str(scores["article_num"]) + "/" + str(scores["article_num_max"]) + \
@@ -154,7 +190,7 @@ if __name__ == '__main__':
                    ", 每日登陆:" + str(scores["login"]) + "/" + str(scores["login_max"]) + \
                    "\n > ###### 每周答题: " + str(scores["weekly"]) + "/" + str(scores["weekly_max"]) + \
                    ", 专项答题:" + str(scores["special"]) + \
-                   "/" + str(scores["special_max"])
+                   "/" + str(scores["special_max"]) + cookie_expire_msg
         sendMessage(send_msg)
     except Exception as e:
         pass

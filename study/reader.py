@@ -1,50 +1,55 @@
+import func.common
 from func.common import *
 from func.urls import *
 from func.Xuecore import XCore
 from func.score import *
 
-def learn(model, cookies, scores):    
-    course = get_study_scores(model, cookies)
-    try:
-        if course["num"] < course["num_max"] or course["time"] < course["time_max"]:
-            learning = XCore(nohead=True)
-            print(course["model"])
-            learning.set_cookies(cookies)
-            learn_links = get_links(model)
-            all_links = len(learn_links)
-            try_count = learn_time = 0
+def learn(model, cookies, scores):
+    try_count = 0
+    while try_count < 3:
+        try_count += 1
+        learning = XCore(nohead=True)
+        try:
+            course = get_study_scores(model, cookies)
+            if course["num"] < course["num_max"] or course["time"] < course["time_max"]:
+                print(course["model"])
+                learning.set_cookies(cookies)
+                learn_links = get_links(model)
+                all_links = len(learn_links)
+                try_count = learn_time = 0
 
-            while True:
-                if try_count < 20:                
-                    num_remain = course["num_max"] - course["num"]
-                    time_remain = course["time_max"] - course["time"]
-                    learn_remain = num_remain + time_remain
-                    link_num = random.randint(1, all_links)
-                    learning.get_url(learn_links[link_num]["url"])
-                    print(course["title"] + learn_links[link_num]["title"])
-                    print(course["publishTime"] + learn_links[link_num]["publishTime"])
-                    print(course["url"] + learn_links[link_num]["url"])
-                    
-                    learn_time = 50 + random.randint(5, 15)
-                    for i in range(learn_time):
-                        if random.random() > 0.5:
-                            learning.driver.execute_script('window.scrollTo(0, document.body.scrollHeight/120*{})'.format(i))
-                            time.sleep(1)
-                        print("正在进行阅读学习中，剩余{}篇，本篇剩余时间{}秒".format(learn_remain, learn_time - i), end="\r", flush=True)
-                    learning.driver.execute_script('window.scrollTo(0, document.body.scrollHeight)')
-                    print("\n")
-                    course = get_study_scores(model, cookies, True)
-                    try_count += 1
-                    if course["num"] >= course["num_max"] and course["time"] >= course["time_max"]:
-                        print("检测到本次阅读学习分数已满，退出学习")
-                        break
+                while True:
+                    if try_count < 20:
+                        num_remain = course["num_max"] - course["num"]
+                        time_remain = course["time_max"] - course["time"]
+                        learn_remain = num_remain + time_remain
+                        link_num = random.randint(1, all_links)
+                        learning.get_url(learn_links[link_num]["url"])
+                        print(course["title"] + learn_links[link_num]["title"])
+                        print(course["publishTime"] + learn_links[link_num]["publishTime"])
+                        print(course["url"] + learn_links[link_num]["url"])
+
+                        learn_time = 50 + random.randint(5, 15)
+                        for i in range(learn_time):
+                            if random.random() > 0.5:
+                                learning.driver.execute_script('window.scrollTo(0, document.body.scrollHeight/120*{})'.format(i))
+                                time.sleep(1)
+                            print("正在进行阅读学习中，剩余{}篇，本篇剩余时间{}秒".format(learn_remain, learn_time - i), end="\r", flush=True)
+                        learning.driver.execute_script('window.scrollTo(0, document.body.scrollHeight)')
+                        print("\n")
+                        course = get_study_scores(model, cookies, True)
+                        try_count += 1
+                        if course["num"] >= course["num_max"] and course["time"] >= course["time_max"]:
+                            print("检测到本次阅读学习分数已满，退出学习")
+                            break
             else:
-                print("阅读学习出现异常，稍后可重新运行")
-            learning.quit() 
-        else:
-            print(color.yellow("[*]") + course["end"]) 
-    except Exception as e:
-        print(color.red("阅读学习检测到异常："+str(e)))
+                print(color.yellow("[*]") + course["end"])
+            learning.quit()
+            break
+        except Exception as e:
+            print(color.red("阅读学习检测到异常："+str(e)))
+            print("继续重试..")
+            learning.quit()
 
 def get_links(model):
     URID = random.randint(10000000,30000000)
@@ -57,7 +62,8 @@ def get_links(model):
         return "error"
     learn_list = []
     try:
-        learn_json = requests.get(learn_url + "?_st=" + str(URID)).content.decode("utf8")
+        custom_headers = {'Cache-Control': 'no-cache', 'User-Agent': func.common.user_agent}
+        learn_json = requests.get(learn_url + "?_st=" + str(URID), headers=custom_headers).content.decode("utf8")
         learn_list = json.loads(learn_json)
         if(len(learn_list) > 600):
             learn_list = learn_list[:600]        
